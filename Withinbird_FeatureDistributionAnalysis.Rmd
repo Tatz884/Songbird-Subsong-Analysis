@@ -1,0 +1,148 @@
+---
+title: "20180119WithinBird"
+output: html_notebook
+---
+
+
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(glue)
+```
+  
+  
+#create a list of tibble
+```{r}
+dph <- excel_sheets("C:\\Users\\Oferlab_11\\Desktop\\New folder\\Subsong_now\\stability\\stabilityR658.xlsx")
+WithinBird <- lapply(dph,
+                      read_excel,
+                      path = "C:\\Users\\Oferlab_11\\Desktop\\New folder\\Subsong_now\\stability\\stabilityR658.xlsx")
+```
+
+
+
+  
+
+  
+# Now tibblize list with bird names
+```{r}
+WithinBird <- tibble(day = dph, feature_distribution = WithinBird)
+WithinBird
+```
+
+# annotating birdname to each observation using unnest
+```{r}
+WithinBirdfd <- WithinBird %>%
+  unnest(feature_distribution)
+
+WithinBirdfd
+```
+
+
+# turn it into long data
+```{r}
+WithinBirdeachfd_AMFM <- WithinBirdfd %>%
+  gather(Time:Duration_of_state, key=feature, value=value) %>%
+  group_by(feature, day) %>%
+  filter(feature %in% c("AM","FM"))
+
+WithinBirdeachfd_others <- WithinBirdfd %>%
+  gather(Time:Duration_of_state, key=feature, value=value) %>%
+  group_by(feature, day) %>%
+  filter(!feature %in% c("AM","FM")) %>%
+  filter(value != 0)
+WithinBirdeachfd <- full_join(WithinBirdeachfd_AMFM,WithinBirdeachfd_others)
+
+WithinBirdeachfd <- WithinBirdeachfd %>%
+  summarize(value = list(value)) %>%
+  spread(day, value) %>%
+  group_by(feature)
+
+WithinBirdeachfd
+```
+# remove 0
+function(x) x <- x[ x != 0 ]
+
+WithinBirdeachfd %>%
+map(function(x) x <- x[ x != 0 ])
+
+
+# YATTAZE2!
+```{r}
+
+colnameoftibble <- WithinBirdeachfd %>%
+  colnames()
+
+d1 = c(colnameoftibble[2:(length(dph)+1)])
+d2 = c(colnameoftibble[2:(length(dph)+1)])
+crossings <- crossing(d1,d2)
+
+
+my_func <- function(d1, d2) {
+  list( #do not use tibble here (that will make list name and pmap cannot handle later on)
+  WithinBirdeachfd %>% slice(1) %>% pull(d1),
+  WithinBirdeachfd %>% slice(1) %>% pull(d2)
+  )
+}
+
+Asdf <- pmap(crossings, my_func)
+
+my_func2 <- function(x, y) ks.test(x, y)
+
+# perhaps this is good strategy, but does not work. need to convert . from list to double
+KSstatresult <- Asdf %>% 
+  modify_depth(1, ~ pmap(., my_func2)) %>%
+  invisible() # suppress output
+# here I want to also suppress warnings, but do not know how
+
+
+combinedcolnames <- crossings %>% glue_data('{d1} vs {d2}')
+#KSstatresult <- set_names(KSstatresult, combinedcolnames) %>%
+#  invisible()
+
+names(KSstatresult) <- combinedcolnames
+KSstatresult_tibble <- as.tibble(KSstatresult)
+KSstatresult_tibble <- KSstatresult_tibble %>%
+  mutate(feature = unlist(WithinBirdeachfd$feature))
+KSstatresult_tibble <- gather(KSstatresult_tibble, day, value, combinedcolnames)
+KSstatresult_tibble <- KSstatresult_tibble %>%
+  mutate(KSstatvalue = {
+    map(.$value, "statistic")
+    }
+  )
+KSstatresult_tibble <- KSstatresult_tibble %>%
+  mutate(KSstatvalue = unlist(KSstatvalue))
+KSstatresult_tibble2 <- KSstatresult_tibble %>%
+  separate(day, c("d1","d2"), sep = ' vs ')
+try <- KSstatresult_tibble %>% select(-value) %>% nest(-feature)
+try[[2]] <- map(try[[2]], ~ separate(., day, c("d1","d2"), sep = ' vs '))
+ghm <- ggplot(KSstatresult_tibble2, aes(x = d1, y = d2, fill = KSstatvalue))
+ghm <- ghm + geom_tile()
+ghm <- ghm + facet_wrap( ~ feature)
+ghm <- ghm + scale_fill_gradient(limits=c(0,1))
+ghm
+```
+
+
+
+```{r}
+WithinBirdeachfdaaa <- WithinBirdeachfd %>%
+  gather(key=day, value=value,colnameoftibble[2:(length(dph)+1)]) %>%
+  unnest(value)
+WithinBirdeachfdaaa
+
+```
+
+
+# plot violins
+```{r}
+ggplot(WithinBirdeachfdaaa, aes(x = day, y = value), size = 1) +
+  geom_violin(aes(fill = day), alpha = 0.5) +
+  geom_boxplot(aes(fill = day), alpha = 0.8, width = 0.2) +
+  facet_wrap(~ feature, scale = "free_x") +
+  coord_flip()
+```
+
+
+
