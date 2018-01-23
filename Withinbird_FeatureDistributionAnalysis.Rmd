@@ -115,8 +115,6 @@ KSstatresult_tibble <- KSstatresult_tibble %>%
   mutate(KSstatvalue = unlist(KSstatvalue))
 KSstatresult_tibble2 <- KSstatresult_tibble %>%
   separate(day, c("d1","d2"), sep = ' vs ')
-try <- KSstatresult_tibble %>% select(-value) %>% nest(-feature)
-try[[2]] <- map(try[[2]], ~ separate(., day, c("d1","d2"), sep = ' vs '))
 ghm <- ggplot(KSstatresult_tibble2, aes(x = d1, y = d2, fill = KSstatvalue))
 ghm <- ghm + geom_tile()
 ghm <- ghm + facet_wrap( ~ feature)
@@ -124,6 +122,13 @@ ghm <- ghm + scale_fill_gradient(limits=c(0,1))
 ghm
 ```
 
+
+```{r}
+try <- KSstatresult_tibble %>% select(-value) %>% nest(-feature)
+try[[2]] <- map(try[[2]], ~ separate(., day, c("d1","d2"), sep = ' vs '))
+try[[2]] <- try[[2]] %>%
+map(~filter(., d1 < d2)) #selecting only unique combi of d1-d2, works also for chr vectors
+```
 
 
 ```{r}
